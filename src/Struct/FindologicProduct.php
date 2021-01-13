@@ -809,32 +809,30 @@ class FindologicProduct extends Struct
      */
     protected function setCategoriesAndCatUrls(): void
     {
-        $productCategories = $this->product->getCategories();
-        if ($productCategories === null || empty($productCategories->count())) {
-            throw new ProductHasNoCategoriesException($this->product);
-        }
-
-        $categoryAttribute = new Attribute('cat');
-        $catUrlAttribute = new Attribute('cat_url');
-
         $catUrls = [];
         $categories = [];
 
-        $this->parseCategoryAttributes($productCategories->getElements(), $catUrls, $categories);
+        $productCategories = $this->product->getCategories();
+        if ($productCategories !== null && !empty($productCategories->count())) {
+            $this->parseCategoryAttributes($productCategories->getElements(), $catUrls, $categories);
+        }
+
         if ($this->dynamicProductGroupService) {
             $dynamicGroupCategories = $this->dynamicProductGroupService->getCategories($this->product->getId());
             $this->parseCategoryAttributes($dynamicGroupCategories, $catUrls, $categories);
         }
 
-        if (!Utils::isEmpty($catUrls)) {
-            $catUrlAttribute->setValues(array_unique($catUrls));
-            $this->attributes[] = $catUrlAttribute;
+        if (Utils::isEmpty($categories) || Utils::isEmpty($catUrls)) {
+            throw new ProductHasNoCategoriesException($this->product);
         }
 
-        if (!Utils::isEmpty($categories)) {
-            $categoryAttribute->setValues(array_unique($categories));
-            $this->attributes[] = $categoryAttribute;
-        }
+        $categoryAttribute = new Attribute('cat');
+        $categoryAttribute->setValues(array_unique($categories));
+        $this->attributes[] = $categoryAttribute;
+
+        $catUrlAttribute = new Attribute('cat_url');
+        $catUrlAttribute->setValues(array_unique($catUrls));
+        $this->attributes[] = $catUrlAttribute;
     }
 
     protected function setVariantPrices(): void
