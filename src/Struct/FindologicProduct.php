@@ -19,6 +19,7 @@ use FINDOLOGIC\FinSearch\Exceptions\Export\Product\ProductHasNoCategoriesExcepti
 use FINDOLOGIC\FinSearch\Exceptions\Export\Product\ProductHasNoNameException;
 use FINDOLOGIC\FinSearch\Exceptions\Export\Product\ProductHasNoPricesException;
 use FINDOLOGIC\FinSearch\Export\DynamicProductGroupService;
+use FINDOLOGIC\FinSearch\Export\UrlBuilderService;
 use FINDOLOGIC\FinSearch\Utils\Utils;
 use Psr\Container\ContainerInterface;
 use Shopware\Core\Checkout\Customer\Aggregate\CustomerGroup\CustomerGroupEntity;
@@ -115,6 +116,9 @@ class FindologicProduct extends Struct
     /** @var CategoryEntity */
     protected $navigationCategory;
 
+    /** @var UrlBuilderService */
+    protected $urlBuilderService;
+
     /**
      * @param CustomerGroupEntity[] $customerGroups
      *
@@ -148,6 +152,12 @@ class FindologicProduct extends Struct
         $this->navigationCategory = Utils::fetchNavigationCategoryFromSalesChannel(
             $this->container->get('category.repository'),
             $this->salesChannelContext->getSalesChannel()
+        );
+        $this->urlBuilderService = new UrlBuilderService();
+        $this->urlBuilderService->initialize(
+            $this->salesChannelContext,
+            $this->router,
+            $this->container->get('category.repository')
         );
 
         $this->setName();
@@ -1078,31 +1088,33 @@ class FindologicProduct extends Struct
                 continue;
             }
 
-            $seoUrls = $this->fetchCategorySeoUrls($categoryEntity);
-            if ($seoUrls->count() > 0) {
-                foreach ($seoUrls->getElements() as $seoUrlEntity) {
-                    $catUrl = $seoUrlEntity->getSeoPathInfo();
-                    if (!Utils::isEmpty($catUrl)) {
-                        $catUrls[] = $this->getCatUrlPrefix() . sprintf('/%s', ltrim($catUrl, '/'));
-                    }
-                }
-            }
+//            $seoUrls = $this->fetchCategorySeoUrls($categoryEntity);
+//            if ($seoUrls->count() > 0) {
+//                foreach ($seoUrls->getElements() as $seoUrlEntity) {
+//                    $catUrl = $seoUrlEntity->getSeoPathInfo();
+//                    if (!Utils::isEmpty($catUrl)) {
+//                        $catUrls[] = $this->getCatUrlPrefix() . sprintf('/%s', ltrim($catUrl, '/'));
+//                    }
+//                }
+//            }
+//
+//            $catUrl = sprintf(
+//                '/%s',
+//                ltrim(
+//                    $this->router->generate(
+//                        'frontend.navigation.page',
+//                        ['navigationId' => $categoryEntity->getId()],
+//                        RouterInterface::ABSOLUTE_PATH
+//                    ),
+//                    '/'
+//                )
+//            );
+//
+//            if (!Utils::isEmpty($catUrl)) {
+//                $catUrls[] = $catUrl;
+//            }
 
-            $catUrl = sprintf(
-                '/%s',
-                ltrim(
-                    $this->router->generate(
-                        'frontend.navigation.page',
-                        ['navigationId' => $categoryEntity->getId()],
-                        RouterInterface::ABSOLUTE_PATH
-                    ),
-                    '/'
-                )
-            );
-
-            if (!Utils::isEmpty($catUrl)) {
-                $catUrls[] = $catUrl;
-            }
+            $catUrls = array_merge($catUrls, $this->urlBuilderService->buildCatUrls($categoryEntity));
 
             $categoryPath = Utils::buildCategoryPath(
                 $categoryEntity->getBreadcrumb(),
