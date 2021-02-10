@@ -327,20 +327,7 @@ class FindologicProduct extends Struct
 
     protected function setUrl(): void
     {
-        $baseUrl = $this->getTranslatedDomainBaseUrl();
-        $seoPath = $this->getTranslatedSeoPath();
-
-        if ($baseUrl && $seoPath) {
-            $productUrl = sprintf('%s/%s', $baseUrl, $seoPath);
-        } else {
-            $productUrl = $this->router->generate(
-                'frontend.detail.page',
-                ['productId' => $this->product->getId()],
-                RouterInterface::ABSOLUTE_URL
-            );
-        }
-
-        $this->url = $productUrl;
+        $this->url = $this->urlBuilderService->buildProductUrl($this->product);
     }
 
     protected function getTranslatedSeoPath(): ?string

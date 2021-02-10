@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace FINDOLOGIC\FinSearch\Export;
 
 use FINDOLOGIC\FinSearch\Utils\Utils;
-use Shopware\Core\Content\Category\CategoryCollection;
+use Psr\Cache\CacheItemPoolInterface;
 use Shopware\Core\Content\Category\CategoryEntity;
 use Shopware\Core\Content\Product\ProductEntity;
 use Shopware\Core\Content\Seo\SeoUrl\SeoUrlCollection;
@@ -19,6 +19,9 @@ use Symfony\Component\Routing\RouterInterface;
 
 class UrlBuilderService
 {
+    /** @var CacheItemPoolInterface */
+    private $cache;
+
     /** @var SalesChannelContext */
     private $salesChannelContext;
 
@@ -27,6 +30,11 @@ class UrlBuilderService
 
     /** @var EntityRepository */
     private $categoryRepository;
+
+    public function __construct()
+    {
+
+    }
 
     public function initialize(
         SalesChannelContext $salesChannelContext,
@@ -65,33 +73,32 @@ class UrlBuilderService
      * Builds `cat_url`s for Direct Integrations. Based on the given category, all
      * paths until the root category are generated.
      * E.g. Category Structure "Something > Root Category > Men > Shirts > T-Shirts" exports
-     * * /Men/Shirts/T-Shirts
-     * * /Men/Shirts
-     * * /Men
+     * * /Men/Shirts/T-Shirts/
+     * * /Men/Shirts/
+     * * /Men/
+     * * /navigation/4e43b925d5ec43339d2b3414a91151ab
      *
      * In case there is a language prefix assigned to the Sales Channel, this would also be included.
+     * E.g.
+     * * /de/Men/Shirts/T-Shirts/
+     * * /de/navigation/4e43b925d5ec43339d2b3414a91151ab
      *
-     * @param ProductEntity $product
      * @return string[]
      */
     public function buildCatUrls(CategoryEntity $category): array
     {
-        try {
-            $categories = $this->getCategoriesFromHierarchy($category);
+        $tree = $this->getCategoriesFromHierarchy($category);
+        $categories = array_merge(Utils::flat($tree), [$category]);
 
-            $catUrls = array_map(function (CategoryEntity $category) {
-                return $this->buildNonSeoCatUrl($category);
-            }, $categories);
+        $catUrls = array_map(function (CategoryEntity $category) {
+            return $this->buildNonSeoCatUrl($category);
+        }, $categories);
 
-            $seoCatUrls = array_map(function (CategoryEntity $category) {
-                return $this->buildSingleCategoryCatUrls($category);
-            }, $categories);
+        $seoCatUrls = array_map(function (CategoryEntity $category) {
+            return $this->buildSingleCategoryCatUrls($category);
+        }, $categories);
 
-            return array_merge($catUrls, $this->flatten($seoCatUrls));
-        } catch (\Throwable $e) {
-            dump($categories);
-            dd($e);
-        }
+        return array_merge($catUrls, Utils::flat($seoCatUrls));
     }
 
     /**
@@ -191,18 +198,19 @@ class UrlBuilderService
     }
 
     /**
+     * Returns all parent categories in a recursive array. The recursive array will not include the given category.
+     * The main navigation category (aka. root category) won't be added to the recursive array.
+     *
      * @param CategoryEntity $category
-     * @param CategoryEntity[] $categories
      * @return CategoryEntity[]
      */
     protected function getCategoriesFromHierarchy(CategoryEntity $category): array
     {
-        // TODO: Make this recursive.
         $parent = $this->getParentCategory($category);
 
         $categories = [];
-        $categories[] = $category;
         if ($parent && $parent->getId() !== $this->salesChannelContext->getSalesChannel()->getNavigationCategoryId()) {
+            $categories[] = $category;
             $categories[] = $this->getCategoriesFromHierarchy($parent);
         }
 
@@ -224,6 +232,8 @@ class UrlBuilderService
     }
 
     /**
+     * Returns all SEO paths for the given category.
+     *
      * @return string[]
      */
     protected function buildSingleCategoryCatUrls(CategoryEntity $categoryEntity): array
@@ -275,11 +285,5 @@ class UrlBuilderService
                 '/'
             )
         );
-    }
-
-    protected function flatten(array $array) {
-        $return = array();
-        array_walk_recursive($array, function($a) use (&$return) { $return[] = $a; });
-        return $return;
     }
 }
