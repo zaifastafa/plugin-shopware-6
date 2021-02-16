@@ -212,6 +212,8 @@ class UrlBuilderService
         if ($parent && $parent->getId() !== $this->salesChannelContext->getSalesChannel()->getNavigationCategoryId()) {
             $categories[] = $category;
             $categories[] = $this->getCategoriesFromHierarchy($parent);
+        } else {
+            $categories[] = $category;
         }
 
         return $categories;
