@@ -8,14 +8,13 @@ use FINDOLOGIC\FinSearch\Utils\Utils;
 use Psr\Cache\CacheItemInterface;
 use Psr\Cache\CacheItemPoolInterface;
 use Psr\Container\ContainerInterface;
-use Shopware\Core\Content\Category\CategoryCollection;
 use Shopware\Core\Content\Category\CategoryEntity;
+use Shopware\Core\Content\ProductStream\ProductStreamEntity;
 use Shopware\Core\Content\ProductStream\Service\ProductStreamBuilder;
 use Shopware\Core\Content\ProductStream\Service\ProductStreamBuilderInterface;
 use Shopware\Core\Framework\Context;
 use Shopware\Core\Framework\DataAbstractionLayer\EntityRepositoryInterface;
 use Shopware\Core\Framework\DataAbstractionLayer\Search\Criteria;
-use Shopware\Core\Framework\DataAbstractionLayer\Search\Filter\ContainsFilter;
 use Shopware\Core\Framework\DataAbstractionLayer\Search\Filter\EqualsFilter;
 use Shopware\Core\Framework\DataAbstractionLayer\Search\Filter\NotFilter;
 use Shopware\Core\System\SalesChannel\SalesChannelEntity;
@@ -150,37 +149,56 @@ class DynamicProductGroupService
 
     private function parseProductGroups(): array
     {
-        $criteria = $this->buildCriteria();
+        /** @var EntityRepositoryInterface $productStreamRepo */
+        $productStreamRepo = $this->container->get('product_stream.repository');
+        $criteria = new Criteria();
+        $criteria->addAssociations(['categories', 'categories.seoUrls']);
+        $criteria->addFilter(new NotFilter(
+            NotFilter::CONNECTION_OR,
+            [
+                new EqualsFilter('categories.id', null)
+            ]
+        ));
+        $total = $productStreamRepo->searchIds($criteria, $this->context)->getTotal();
+        $offset = 0;
+        $criteria->setLimit(20);
+        $all = [];
 
-        /** @var CategoryCollection $categories */
-        $categories = $this->categoryRepository->search($criteria, $this->context)->getEntities();
+        do {
+            $result = $productStreamRepo->search($criteria, $this->context);
 
-        if ($categories === null || empty($categories->getElements())) {
-            return [];
-        }
+            /** @var ProductStreamEntity $productStream */
+            foreach ($result->getElements() as $productStream) {
+                $productStreamFilters = $this->productStreamBuilder->buildFilters(
+                    $productStream->getId(),
+                    $this->context
+                );
 
-        $products = [];
-        foreach ($categories->getElements() as $categoryEntity) {
-            $productStream = $categoryEntity->getProductStream();
+                $productStreamCriteria = new Criteria();
+                $productStreamCriteria->addFilter(...$productStreamFilters);
 
-            if (!$productStream) {
-                continue;
+                $products = $this->productRepository->searchIds($productStreamCriteria, $this->context);
+                foreach ($products->getIds() as $productId) {
+                    $categoryIds = array_map(function (CategoryEntity $category) {
+//                        $item = $this->cache->getItem(sprintf('fl_product_stream_category_%s', $category->getId()));
+//                        if (!$item->isHit()) {
+//                            $item->set(serialize($category));
+//                            $this->cache->save($item);
+//                        }
+
+                        return $category->getId();
+                    }, $productStream->getCategories()->getElements());
+
+                    $new = array_unique(array_merge($all[$productId] ?? [], $categoryIds), SORT_REGULAR);
+                    $all[$productId] = $new;
+                }
             }
 
-            $filters = $this->productStreamBuilder->buildFilters(
-                $productStream->getId(),
-                $this->context
-            );
+            $offset += $criteria->getLimit();
+            $criteria->setOffset($offset);
+        } while ($total > $offset);
 
-            $criteria = new Criteria();
-            $criteria->addFilter(...$filters);
-            $productIds = $this->productRepository->searchIds($criteria, $this->context)->getIds();
-            foreach ($productIds as $productId) {
-                $products[$productId][] = $categoryEntity;
-            }
-        }
-
-        return $products;
+        return $all;
     }
 
     /**
@@ -193,8 +211,17 @@ class DynamicProductGroupService
         if ($cacheItem->isHit()) {
             $categories = unserialize($cacheItem->get());
         }
+
         if (!Utils::isEmpty($categories) && isset($categories[$productId])) {
-            return $categories[$productId];
+            $categoryIds = $categories[$productId];
+            $criteria = $this->buildCriteria();
+            $criteria->setIds($categoryIds);
+
+            return $this->categoryRepository->search($criteria, $this->context)->getElements();
+//            return array_map(function (string $categoryId) {
+//                $item = $this->cache->getItem(sprintf('fl_product_stream_category_%s', $categoryId));
+//                return unserialize($item->get());
+//            }, $categoryIds);
         }
 
         return [];
@@ -202,18 +229,18 @@ class DynamicProductGroupService
 
     private function buildCriteria(): Criteria
     {
-        $mainCategoryId = $this->salesChannel->getNavigationCategoryId();
+//        $mainCategoryId = $this->salesChannel->getNavigationCategoryId();
 
         $criteria = new Criteria();
-        $criteria->addFilter(new ContainsFilter('path', $mainCategoryId));
+//        $criteria->addFilter(new ContainsFilter('path', $mainCategoryId));
         $criteria->addAssociation('seoUrls');
-        $criteria->addAssociation('productStream');
-        $criteria->addFilter(
-            new NotFilter(
-                NotFilter::CONNECTION_AND,
-                [new EqualsFilter('productStreamId', null)]
-            )
-        );
+//        $criteria->addAssociation('productStream');
+//        $criteria->addFilter(
+//            new NotFilter(
+//                NotFilter::CONNECTION_AND,
+//                [new EqualsFilter('productStreamId', null)]
+//            )
+//        );
 
         return $criteria;
     }
