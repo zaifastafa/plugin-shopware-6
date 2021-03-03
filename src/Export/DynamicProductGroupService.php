@@ -149,6 +149,8 @@ class DynamicProductGroupService
 
     private function parseProductGroups(): array
     {
+        $start = microtime(true);
+
         /** @var EntityRepositoryInterface $productStreamRepo */
         $productStreamRepo = $this->container->get('product_stream.repository');
         $criteria = new Criteria();
@@ -169,6 +171,7 @@ class DynamicProductGroupService
 
             /** @var ProductStreamEntity $productStream */
             foreach ($result->getElements() as $productStream) {
+//                dump('1: ', microtime(true) - $start);
                 $productStreamFilters = $this->productStreamBuilder->buildFilters(
                     $productStream->getId(),
                     $this->context
@@ -176,22 +179,32 @@ class DynamicProductGroupService
 
                 $productStreamCriteria = new Criteria();
                 $productStreamCriteria->addFilter(...$productStreamFilters);
+//                dump('2: ', microtime(true) - $start);
 
                 $products = $this->productRepository->searchIds($productStreamCriteria, $this->context);
+//                dump('3: ', microtime(true) - $start);
+                $categoryIds = $productStream->getCategories()->getIds();
                 foreach ($products->getIds() as $productId) {
-                    $categoryIds = array_map(function (CategoryEntity $category) {
+//                    $categoryIds = array_map(function (CategoryEntity $category) {
 //                        $item = $this->cache->getItem(sprintf('fl_product_stream_category_%s', $category->getId()));
 //                        if (!$item->isHit()) {
 //                            $item->set(serialize($category));
 //                            $this->cache->save($item);
 //                        }
+//
+//                        return $category->getId();
+//                    }, $productStream->getCategories()->getElements());
+//                    dump('After map: ', microtime(true) - $start);
 
-                        return $category->getId();
-                    }, $productStream->getCategories()->getElements());
-
-                    $new = array_unique(array_merge($all[$productId] ?? [], $categoryIds), SORT_REGULAR);
-                    $all[$productId] = $new;
+                    if (!isset($all[$productId])) {
+                        $all[$productId] = [];
+                    }
+                    $this->simpleMerge($all[$productId], $categoryIds);
+//                    $new = array_unique(array_merge($all[$productId] ?? [], $categoryIds), SORT_REGULAR);
+//                    dump('After merge: ', microtime(true) - $start);
+//                    $all[$productId] = $new;
                 }
+//                dump('4: ', microtime(true) - $start);
             }
 
             $offset += $criteria->getLimit();
@@ -199,6 +212,12 @@ class DynamicProductGroupService
         } while ($total > $offset);
 
         return $all;
+    }
+
+    private function simpleMerge(&$array1, &$array2) {
+        foreach($array2 as $i) {
+            $array1[] = $i;
+        }
     }
 
     /**
