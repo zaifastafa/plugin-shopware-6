@@ -10,6 +10,7 @@ use FINDOLOGIC\Export\Data\DateAdded;
 use FINDOLOGIC\Export\Data\Image;
 use FINDOLOGIC\Export\Data\Item;
 use FINDOLOGIC\Export\Data\Keyword;
+use FINDOLOGIC\Export\Data\Name;
 use FINDOLOGIC\Export\Data\Ordernumber;
 use FINDOLOGIC\Export\Data\Price;
 use FINDOLOGIC\Export\Data\Property;
@@ -20,6 +21,9 @@ use FINDOLOGIC\FinSearch\Exceptions\Export\Product\ProductHasNoCategoriesExcepti
 use FINDOLOGIC\FinSearch\Exceptions\Export\Product\ProductHasNoNameException;
 use FINDOLOGIC\FinSearch\Exceptions\Export\Product\ProductHasNoPricesException;
 use FINDOLOGIC\FinSearch\Export\DynamicProductGroupService;
+use FINDOLOGIC\FinSearch\Export\Fields\AttributeField;
+use FINDOLOGIC\FinSearch\Export\Fields\ExportFieldInterface;
+use FINDOLOGIC\FinSearch\Export\Fields\NameField;
 use FINDOLOGIC\FinSearch\Export\ProductImageService;
 use FINDOLOGIC\FinSearch\Utils\Utils;
 use Psr\Container\ContainerInterface;
@@ -47,6 +51,12 @@ use function method_exists;
 
 class FindologicProduct extends Struct
 {
+    /** @var NameField */
+    protected $nameField;
+
+    /** @var AttributeField */
+    protected $attributeField;
+
     /** @var ProductEntity */
     protected $product;
 
@@ -65,7 +75,7 @@ class FindologicProduct extends Struct
     /** @var CustomerGroupEntity[] */
     protected $customerGroups;
 
-    /** @var string */
+    /** @var Name */
     protected $name;
 
     /** @var Attribute[] */
@@ -136,7 +146,9 @@ class FindologicProduct extends Struct
         ContainerInterface $container,
         string $shopkey,
         array $customerGroups,
-        Item $item
+        Item $item,
+        ?NameField $nameField = null,
+        ?AttributeField $attributeField = null
     ) {
         $this->product = $product;
         $this->router = $router;
@@ -148,6 +160,8 @@ class FindologicProduct extends Struct
         $this->attributes = [];
         $this->properties = [];
         $this->translator = $container->get('translator');
+        $this->nameField = $nameField;
+        $this->attributeField = $attributeField;
 
         $this->salesChannelContext = $this->container->get('fin_search.sales_channel_context');
         if ($this->container->has('fin_search.dynamic_product_group')) {
@@ -176,7 +190,7 @@ class FindologicProduct extends Struct
     /**
      * @throws AccessEmptyPropertyException
      */
-    public function getName(): string
+    public function getName(): Name
     {
         if (!$this->hasName()) {
             throw new AccessEmptyPropertyException($this->product);
@@ -190,17 +204,13 @@ class FindologicProduct extends Struct
      */
     protected function setName(): void
     {
-        $name = $this->product->getTranslation('name');
-        if (Utils::isEmpty($name)) {
-            throw new ProductHasNoNameException($this->product);
-        }
-
-        $this->name = Utils::removeControlCharacters($name);
+        $this->nameField->setProduct($this->product);
+        $this->name = $this->nameField->parse();
     }
 
     public function hasName(): bool
     {
-        return !Utils::isEmpty($this->name);
+        return !Utils::isEmpty($this->name->getValues());
     }
 
     /**

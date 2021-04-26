@@ -8,6 +8,8 @@ use FINDOLOGIC\Export\Data\Item;
 use FINDOLOGIC\FinSearch\Exceptions\Export\Product\ProductHasNoCategoriesException;
 use FINDOLOGIC\FinSearch\Exceptions\Export\Product\ProductHasNoNameException;
 use FINDOLOGIC\FinSearch\Exceptions\Export\Product\ProductHasNoPricesException;
+use FINDOLOGIC\FinSearch\Export\Fields\AttributeField;
+use FINDOLOGIC\FinSearch\Export\Fields\NameField;
 use FINDOLOGIC\FinSearch\Struct\FindologicProduct;
 use Psr\Container\ContainerInterface;
 use Shopware\Core\Checkout\Customer\Aggregate\CustomerGroup\CustomerGroupEntity;
@@ -30,7 +32,9 @@ class FindologicProductFactory
         ContainerInterface $container,
         string $shopkey,
         array $customerGroups,
-        Item $item
+        Item $item,
+        NameField $nameField,
+        AttributeField $attributeField
     ): FindologicProduct {
         return new FindologicProduct(
             $product,
@@ -38,7 +42,9 @@ class FindologicProductFactory
             $container,
             $shopkey,
             $customerGroups,
-            $item
+            $item,
+            $nameField,
+            $attributeField
         );
     }
 }

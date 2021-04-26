@@ -9,6 +9,7 @@ use FINDOLOGIC\Export\Data\DateAdded;
 use FINDOLOGIC\Export\Data\Image;
 use FINDOLOGIC\Export\Data\Item;
 use FINDOLOGIC\Export\Data\Keyword;
+use FINDOLOGIC\Export\Data\Name;
 use FINDOLOGIC\Export\Data\Price;
 use FINDOLOGIC\Export\Data\Property;
 use FINDOLOGIC\Export\Data\Usergroup;
@@ -21,13 +22,17 @@ use FINDOLOGIC\FinSearch\Exceptions\Export\Product\ProductHasNoNameException;
 use FINDOLOGIC\FinSearch\Exceptions\Export\Product\ProductHasNoPricesException;
 use FINDOLOGIC\FinSearch\Exceptions\Export\Product\ProductInvalidException;
 use FINDOLOGIC\FinSearch\Export\Definitions\XmlFields;
+use FINDOLOGIC\FinSearch\Export\Fields\AttributeField;
+use FINDOLOGIC\FinSearch\Export\Fields\NameField;
 use FINDOLOGIC\FinSearch\Struct\FindologicProduct;
+use FINDOLOGIC\FinSearch\Utils\Utils;
 use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
 use Shopware\Core\Checkout\Customer\Aggregate\CustomerGroup\CustomerGroupEntity;
 use Shopware\Core\Content\Product\ProductEntity;
 use Shopware\Core\Framework\Context;
+use Shopware\Core\System\SalesChannel\SalesChannelContext;
 use Symfony\Component\Routing\RouterInterface;
 use Throwable;
 
@@ -107,9 +112,9 @@ class XmlProduct
         }
     }
 
-    private function setName(?string $name): void
+    private function setName(Name $name): void
     {
-        $this->xmlItem->addName($name);
+        $this->xmlItem->setName($name);
     }
 
     /**
@@ -205,6 +210,9 @@ class XmlProduct
      */
     private function build(): void
     {
+        $nameField = $this->container->get(NameField::class);
+        $attributeField = $this->container->get(AttributeField::class);
+
         /** @var FindologicProductFactory $findologicProductFactory */
         $findologicProductFactory = $this->container->get(FindologicProductFactory::class);
         $this->findologicProduct = $findologicProductFactory->buildInstance(
@@ -213,7 +221,9 @@ class XmlProduct
             $this->container,
             $this->shopkey,
             $this->customerGroups,
-            $this->xmlItem
+            $this->xmlItem,
+            $nameField,
+            $attributeField
         );
 
         $this->assertRequiredFieldsAreSet();
