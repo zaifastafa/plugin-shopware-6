@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace FINDOLOGIC\FinSearch\Export\Fields;
+namespace FINDOLOGIC\FinSearch\Export\Data\Fields;
 
 use FINDOLOGIC\Export\Helpers\Serializable;
 

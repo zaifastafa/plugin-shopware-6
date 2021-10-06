@@ -84,6 +84,14 @@ class ProductErrorHandler implements HandlerInterface
      */
     protected function handleProductError(array $record): void
     {
+        if (isset($record['context']['product'])) {
+            /** @var ProductEntity $product */
+            $product = $record['context']['product'];
+            $productError = new ProductError($product->getId(), [$record['message']]);
+
+            $this->exportErrors->addProductError($productError);
+        }
+
         if (isset($record['context']['exception'])) {
             /** @var ProductInvalidException $exception */
             $exception = $record['context']['exception'];
@@ -92,14 +100,6 @@ class ProductErrorHandler implements HandlerInterface
             }
 
             $product = $exception->getProduct();
-            $productError = new ProductError($product->getId(), [$record['message']]);
-
-            $this->exportErrors->addProductError($productError);
-        }
-
-        if (isset($record['context']['product'])) {
-            /** @var ProductEntity $product */
-            $product = $record['context']['product'];
             $productError = new ProductError($product->getId(), [$record['message']]);
 
             $this->exportErrors->addProductError($productError);

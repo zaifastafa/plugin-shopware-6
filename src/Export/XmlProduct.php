@@ -5,13 +5,18 @@ declare(strict_types=1);
 namespace FINDOLOGIC\FinSearch\Export;
 
 use FINDOLOGIC\Export\Data\Attribute;
+use FINDOLOGIC\Export\Data\Bonus;
 use FINDOLOGIC\Export\Data\DateAdded;
+use FINDOLOGIC\Export\Data\Description;
 use FINDOLOGIC\Export\Data\Image;
 use FINDOLOGIC\Export\Data\Item;
 use FINDOLOGIC\Export\Data\Keyword;
 use FINDOLOGIC\Export\Data\Name;
 use FINDOLOGIC\Export\Data\Price;
 use FINDOLOGIC\Export\Data\Property;
+use FINDOLOGIC\Export\Data\SalesFrequency;
+use FINDOLOGIC\Export\Data\Sort;
+use FINDOLOGIC\Export\Data\Url;
 use FINDOLOGIC\Export\Data\Usergroup;
 use FINDOLOGIC\Export\Exporter;
 use FINDOLOGIC\FinSearch\Exceptions\Export\Product\AccessEmptyPropertyException;
@@ -19,10 +24,22 @@ use FINDOLOGIC\FinSearch\Exceptions\Export\Product\ProductHasNoAttributesExcepti
 use FINDOLOGIC\FinSearch\Exceptions\Export\Product\ProductHasNoCategoriesException;
 use FINDOLOGIC\FinSearch\Exceptions\Export\Product\ProductHasNoNameException;
 use FINDOLOGIC\FinSearch\Exceptions\Export\Product\ProductHasNoPricesException;
+use FINDOLOGIC\FinSearch\Export\Data\Fields\AttributeField;
+use FINDOLOGIC\FinSearch\Export\Data\Fields\BonusField;
+use FINDOLOGIC\FinSearch\Export\Data\Fields\DateAddedField;
+use FINDOLOGIC\FinSearch\Export\Data\Fields\DescriptionField;
+use FINDOLOGIC\FinSearch\Export\Data\Fields\ImageField;
+use FINDOLOGIC\FinSearch\Export\Data\Fields\KeywordField;
+use FINDOLOGIC\FinSearch\Export\Data\Fields\NameField;
+use FINDOLOGIC\FinSearch\Export\Data\Fields\OrdernumberField;
+use FINDOLOGIC\FinSearch\Export\Data\Fields\PriceField;
+use FINDOLOGIC\FinSearch\Export\Data\Fields\PropertyField;
+use FINDOLOGIC\FinSearch\Export\Data\Fields\SalesFrequencyField;
+use FINDOLOGIC\FinSearch\Export\Data\Fields\SortField;
+use FINDOLOGIC\FinSearch\Export\Data\Fields\UrlField;
+use FINDOLOGIC\FinSearch\Export\Data\Fields\UsergroupField;
 use FINDOLOGIC\FinSearch\Export\Definitions\XmlFields;
 use FINDOLOGIC\FinSearch\Export\Logger\ExportExceptionLogger;
-use FINDOLOGIC\FinSearch\Export\Fields\AttributeField;
-use FINDOLOGIC\FinSearch\Export\Fields\NameField;
 use FINDOLOGIC\FinSearch\Struct\FindologicProduct;
 use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
@@ -135,12 +152,9 @@ class XmlProduct
         }
     }
 
-    /**
-     * @throws AccessEmptyPropertyException
-     */
-    private function setDescription(?string $description): void
+    private function setDescription(Description $description): void
     {
-        $this->xmlItem->addDescription($description);
+        $this->xmlItem->setDescription($description);
     }
 
     private function setDateAdded(?DateAdded $dateAdded): void
@@ -148,9 +162,9 @@ class XmlProduct
         $this->xmlItem->setDateAdded($dateAdded);
     }
 
-    private function setUrl(?string $url): void
+    private function setUrl(Url $url): void
     {
-        $this->xmlItem->addUrl($url);
+        $this->xmlItem->setUrl($url);
     }
 
     /**
@@ -169,9 +183,9 @@ class XmlProduct
         $this->xmlItem->setAllImages($images);
     }
 
-    private function setSalesFrequency(int $salesFrequency): void
+    private function setSalesFrequency(SalesFrequency $salesFrequency): void
     {
-        $this->xmlItem->addSalesFrequency($salesFrequency);
+        $this->xmlItem->setSalesFrequency($salesFrequency);
     }
 
     /**
@@ -197,6 +211,16 @@ class XmlProduct
         }
     }
 
+    private function setSort(Sort $sort): void
+    {
+        $this->xmlItem->setSort($sort);
+    }
+
+    private function setBonus(Bonus $bonus): void
+    {
+        $this->xmlItem->setBonus($bonus);
+    }
+
     /**
      * @throws AccessEmptyPropertyException
      * @throws ProductHasNoAttributesException
@@ -207,7 +231,19 @@ class XmlProduct
     private function build(): void
     {
         $nameField = $this->container->get(NameField::class);
+        $descriptionField = $this->container->get(DescriptionField::class);
+        $priceField = $this->container->get(PriceField::class);
+        $urlField = $this->container->get(UrlField::class);
+        $bonusField = $this->container->get(BonusField::class);
+        $salesFrequencyField = $this->container->get(SalesFrequencyField::class);
+        $dateAddedField = $this->container->get(DateAddedField::class);
+        $sortField = $this->container->get(SortField::class);
+        $keywordField = $this->container->get(KeywordField::class);
+        $ordernumberField = $this->container->get(OrdernumberField::class);
+        $propertyField = $this->container->get(PropertyField::class);
         $attributeField = $this->container->get(AttributeField::class);
+        $imageField = $this->container->get(ImageField::class);
+        $usergroupField = $this->container->get(UsergroupField::class);
 
         /** @var FindologicProductFactory $findologicProductFactory */
         $findologicProductFactory = $this->container->get(FindologicProductFactory::class);
@@ -218,8 +254,21 @@ class XmlProduct
             $this->shopkey,
             $this->customerGroups,
             $this->xmlItem,
+            null,
             $nameField,
-            $attributeField
+            $descriptionField,
+            $priceField,
+            $urlField,
+            $bonusField,
+            $salesFrequencyField,
+            $dateAddedField,
+            $sortField,
+            $keywordField,
+            $ordernumberField,
+            $propertyField,
+            $attributeField,
+            $imageField,
+            $usergroupField
         );
 
         $this->assertRequiredFieldsAreSet();
@@ -247,6 +296,11 @@ class XmlProduct
         try {
             $this->build();
         } catch (Throwable $e) {
+            // TODO: Is this the best approach?
+            if (getenv('APP_ENV') === 'dev') {
+                throw $e;
+            }
+
             $exceptionLogger = new ExportExceptionLogger($logger);
 
             $exceptionLogger->log($this->product, $e);

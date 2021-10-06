@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace FINDOLOGIC\FinSearch\Tests\Export;
 
+use FINDOLOGIC\FinSearch\Export\DynamicProductGroupService;
 use FINDOLOGIC\FinSearch\Export\XmlExport;
 use FINDOLOGIC\FinSearch\Logger\Handler\ProductErrorHandler;
 use FINDOLOGIC\FinSearch\Tests\Traits\DataHelpers\ProductHelper;
 use FINDOLOGIC\FinSearch\Tests\Traits\DataHelpers\SalesChannelHelper;
 use Monolog\Logger;
+use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Shopware\Core\Framework\Test\TestCaseBase\IntegrationTestBehaviour;
 use Shopware\Core\System\SalesChannel\SalesChannelContext;
@@ -39,6 +41,12 @@ class XmlExportTest extends TestCase
         $this->salesChannelContext = $this->buildSalesChannelContext();
         $this->getContainer()->set('fin_search.sales_channel_context', $this->salesChannelContext);
         $this->crossSellCategories = [];
+
+        /** @var MockObject|DynamicProductGroupService $dynamicProductGroupServiceMock */
+        $dynamicProductGroupServiceMock = $this->getMockBuilder(DynamicProductGroupService::class)
+            ->disableOriginalConstructor()
+            ->getMock();
+        $this->getContainer()->set('fin_search.dynamic_product_group', $dynamicProductGroupServiceMock);
     }
 
     public function testWrapsItemProperly(): void

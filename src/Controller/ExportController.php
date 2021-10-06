@@ -44,7 +44,10 @@ class ExportController extends AbstractController
     /** @var HeaderHandler */
     private $headerHandler;
 
-    /** @var SalesChannelContextFactory|AbstractSalesChannelContextFactory */
+    /**
+     * @var SalesChannelContextFactory|AbstractSalesChannelContextFactory
+     * @deprecated Will be removed with 3.0. Override \FINDOLOGIC\FinSearch\Export\SalesChannelService instead.
+     */
     private $salesChannelContextFactory;
 
     /** @var SalesChannelContext */

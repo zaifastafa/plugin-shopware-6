@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use FINDOLOGIC\Export\Data\Attribute;
 use FINDOLOGIC\Export\Data\Image;
 use FINDOLOGIC\Export\Data\Keyword;
+use FINDOLOGIC\Export\Data\Name;
 use FINDOLOGIC\Export\Data\Ordernumber;
 use FINDOLOGIC\Export\Data\Price;
 use FINDOLOGIC\Export\Data\Property;
@@ -17,6 +18,7 @@ use FINDOLOGIC\FinSearch\Exceptions\Export\Product\AccessEmptyPropertyException;
 use FINDOLOGIC\FinSearch\Exceptions\Export\Product\ProductHasNoCategoriesException;
 use FINDOLOGIC\FinSearch\Exceptions\Export\Product\ProductHasNoNameException;
 use FINDOLOGIC\FinSearch\Exceptions\Export\Product\ProductHasNoPricesException;
+use FINDOLOGIC\FinSearch\Export\DynamicProductGroupService;
 use FINDOLOGIC\FinSearch\Export\FindologicProductFactory;
 use FINDOLOGIC\FinSearch\Export\UrlBuilderService;
 use FINDOLOGIC\FinSearch\Findologic\Config\FindologicConfigService;
@@ -63,6 +65,9 @@ use function getenv;
 use function implode;
 use function parse_url;
 
+/**
+ * @runTestsInSeparateProcesses
+ */
 class FindologicProductTest extends TestCase
 {
     use IntegrationTestBehaviour;
@@ -96,6 +101,13 @@ class FindologicProductTest extends TestCase
         $this->ids = new TestDataCollection(Context::createDefaultContext());
         $this->customerRepository = $this->getContainer()->get('customer.repository');
         $this->getContainer()->set('fin_search.sales_channel_context', $this->salesChannelContext);
+
+        /** @var MockObject|DynamicProductGroupService $dynamicProductGroupServiceMock */
+        $dynamicProductGroupServiceMock = $this->getMockBuilder(DynamicProductGroupService::class)
+            ->disableOriginalConstructor()
+            ->getMock();
+
+        $this->getContainer()->set('fin_search.dynamic_product_group', $dynamicProductGroupServiceMock);
     }
 
     public function productNameProvider(): array
@@ -116,6 +128,12 @@ class FindologicProductTest extends TestCase
      */
     public function testProductName(?string $name, ?string $exception): void
     {
+        $expectedName = new Name();
+        // Only set name if available, otherwise libflexport may throw an exception.
+        if ($name) {
+            $expectedName->setValue($name);
+        }
+
         if ($exception) {
             $this->expectException($exception);
         }
@@ -136,7 +154,7 @@ class FindologicProductTest extends TestCase
 
         if (!$exception) {
             $this->assertTrue($findologicProduct->hasName());
-            $this->assertSame($name, $findologicProduct->getName());
+            $this->assertEquals($expectedName, $findologicProduct->getName());
         } else {
             $this->assertFalse($findologicProduct->hasName());
         }
@@ -247,6 +265,7 @@ class FindologicProductTest extends TestCase
         $productEntity = $this->createTestProduct($categoryData);
 
         $config = $this->getMockedConfig();
+        $this->getContainer()->set(Config::class, $config);
         $findologicProductFactory = new FindologicProductFactory();
         $findologicProduct = $findologicProductFactory->buildInstance(
             $productEntity,
@@ -275,6 +294,7 @@ class FindologicProductTest extends TestCase
     {
         $productEntity = $this->createTestProduct();
         $config = $this->getMockedConfig();
+        $this->getContainer()->set(Config::class, $config);
         $findologicProductFactory = new FindologicProductFactory();
         $findologicProduct = $findologicProductFactory->buildInstance(
             $productEntity,
@@ -340,7 +360,7 @@ class FindologicProductTest extends TestCase
         }
     }
 
-    public function testProduct(): void
+    public function testProduct()
     {
         $productEntity = $this->createTestProduct();
 
@@ -358,6 +378,7 @@ class FindologicProductTest extends TestCase
         $properties = $this->getProperties($productEntity);
 
         $config = $this->getMockedConfig();
+        $this->getContainer()->set(Config::class, $config);
         $findologicProductFactory = new FindologicProductFactory();
         $findologicProduct = $findologicProductFactory->buildInstance(
             $productEntity,
@@ -372,9 +393,12 @@ class FindologicProductTest extends TestCase
         $urlBuilderService = $this->getContainer()->get(UrlBuilderService::class);
         $urlBuilderService->setSalesChannelContext($this->salesChannelContext);
 
+        $expectedName = new Name();
+        $expectedName->setValue($productEntity->getName());
+
         $expectedUrl = $urlBuilderService->buildProductUrl($productEntity);
         $this->assertEquals($expectedUrl, $findologicProduct->getUrl());
-        $this->assertEquals($productEntity->getName(), $findologicProduct->getName());
+        $this->assertEquals($expectedName, $findologicProduct->getName());
         $this->assertEquals([$productTag], $findologicProduct->getKeywords());
         $this->assertEquals($images, $findologicProduct->getImages());
         $this->assertEquals(0, $findologicProduct->getSalesFrequency());
@@ -383,7 +407,6 @@ class FindologicProductTest extends TestCase
         $this->assertEquals($ordernumbers, $findologicProduct->getOrdernumbers());
         $this->assertEquals($properties, $findologicProduct->getProperties());
     }
-
     public function testProductWithCustomFields(): void
     {
         $data = [
@@ -410,12 +433,19 @@ class FindologicProductTest extends TestCase
             new XMLItem('123')
         );
 
-        $attributes = $findologicProduct->getCustomFields();
+        $attributes = $findologicProduct->getAttributes();
 
-        $this->assertCount(2, $attributes);
+        $matches = [];
         foreach ($attributes as $attribute) {
+            if (!isset($productFields[$attribute->getKey()])) {
+                continue;
+            }
+
+            $matches[] = current($attribute->getValues());
             $this->assertEquals($productFields[$attribute->getKey()], current($attribute->getValues()));
         }
+
+        $this->assertCount(2, $matches);
     }
 
     public function testMultiDimensionalCustomFieldsAreIgnored(): void
@@ -444,8 +474,9 @@ class FindologicProductTest extends TestCase
             new XMLItem('123')
         );
 
-        $attributes = $findologicProduct->getCustomFields();
-        $this->assertEmpty($attributes);
+        $attributes = $findologicProduct->getAttributes();
+        $this->assertArrayNotHasKey('multidimensional', $attributes);
+        $this->assertArrayNotHasKey('interesting', $attributes);
     }
 
     public function testProductWithMultiSelectCustomFields(): void
@@ -475,9 +506,21 @@ class FindologicProductTest extends TestCase
             new XMLItem('123')
         );
 
-        $attributes = $findologicProduct->getCustomFields();
+        $attributes = $findologicProduct->getAttributes();
+
+        $isset = false;
         foreach ($attributes as $attribute) {
+            if (!isset($productFields[$attribute->getKey()])) {
+                continue;
+            }
+
+            $isset = true;
+            $this->assertCount(3, $attribute->getValues());
             $this->assertEquals($productFields[$attribute->getKey()], $attribute->getValues());
+        }
+
+        if (!$isset) {
+            $this->fail('Expected multiselect custom field has not been set.');
         }
     }
 
@@ -501,7 +544,9 @@ class FindologicProductTest extends TestCase
             new XMLItem('123')
         );
 
-        $this->assertEmpty($findologicProduct->getCustomFields());
+        $attributes = $findologicProduct->getAttributes();
+
+        $this->assertArrayNotHasKey('long_value', $attributes);
     }
 
     public function ratingProvider(): array
@@ -657,6 +702,7 @@ class FindologicProductTest extends TestCase
             ->getElements();
 
         $config = $this->getMockedConfig($integrationType);
+        $this->getContainer()->set(Config::class, $config);
         $findologicProductFactory = new FindologicProductFactory();
         $findologicProduct = $findologicProductFactory->buildInstance(
             $productEntity,
@@ -748,6 +794,7 @@ class FindologicProductTest extends TestCase
             }
         );
 
+        // TODO: This test fails properly. Attributes marked as non exportable must be exported as properties.
         /** @var Property $property */
         $property = reset($foundProperties);
         $this->assertEquals($expectedPropertyValue, $property->getAllValues()['']); // '' = Empty usergroup.
@@ -1118,6 +1165,7 @@ class FindologicProductTest extends TestCase
             ->getElements();
 
         $config = $this->getMockedConfig('API');
+        $this->getContainer()->set(Config::class, $config);
         $findologicProductFactory = new FindologicProductFactory();
         $findologicProduct = $findologicProductFactory->buildInstance(
             $productEntity,
@@ -1282,6 +1330,7 @@ class FindologicProductTest extends TestCase
         );
 
         $config = $this->getMockedConfig();
+        $this->getContainer()->set(Config::class, $config);
         $findologicProductFactory = new FindologicProductFactory();
         $findologicProduct = $findologicProductFactory->buildInstance(
             $productEntity,
@@ -1573,6 +1622,7 @@ class FindologicProductTest extends TestCase
         $productEntity = $this->createTestProduct();
 
         $config = $this->getMockedConfig();
+        $this->getContainer()->set(Config::class, $config);
         $findologicProductFactory = new FindologicProductFactory();
         $findologicProduct = $findologicProductFactory->buildInstance(
             $productEntity,
@@ -2116,6 +2166,7 @@ class FindologicProductTest extends TestCase
 
         $productEntity = $this->createTestProduct(['categories' => $categories]);
         $config = $this->getMockedConfig($integrationType);
+        $this->getContainer()->set(Config::class, $config);
         $findologicProductFactory = new FindologicProductFactory();
         $findologicProduct = $findologicProductFactory->buildInstance(
             $productEntity,

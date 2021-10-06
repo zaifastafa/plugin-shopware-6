@@ -6,18 +6,13 @@ namespace FINDOLOGIC\FinSearch\Export;
 
 use FINDOLOGIC\Export\Data\Item;
 use FINDOLOGIC\Export\Exporter;
-use FINDOLOGIC\Export\Helpers\Serializable;
 use FINDOLOGIC\Export\XML\XMLExporter as XmlFileConverter;
 use FINDOLOGIC\Export\XML\XMLItem;
-use FINDOLOGIC\FinSearch\Export\Fields\AttributeField;
-use FINDOLOGIC\FinSearch\Export\Fields\NameField;
-use FINDOLOGIC\FinSearch\Utils\Utils;
+use FINDOLOGIC\FinSearch\Export\Data\ExportFieldInitializer;
 use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 use Shopware\Core\Checkout\Customer\Aggregate\CustomerGroup\CustomerGroupEntity;
 use Shopware\Core\Content\Product\ProductEntity;
-use Shopware\Core\Framework\DataAbstractionLayer\EntityCollection;
-use Shopware\Core\Framework\Struct\Collection;
 use Shopware\Core\System\SalesChannel\SalesChannelContext;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\RouterInterface;
@@ -86,7 +81,7 @@ class XmlExport extends Export
         string $shopkey,
         array $customerGroups
     ): array {
-        $this->initializeFields();
+        $this->initializeFields($shopkey, $customerGroups);
 
         $items = [];
         foreach ($productEntities as $productEntity) {
@@ -152,67 +147,15 @@ class XmlExport extends Export
         return false;
     }
 
-    private function initializeFields(): void
+    /**
+     * @param CustomerGroupEntity[] $customerGroups
+     */
+    private function initializeFields(string $shopkey, array $customerGroups): void
     {
         /** @var SalesChannelContext $salesChannelContext */
         $salesChannelContext = $this->container->get('fin_search.sales_channel_context');
 
-        /** @var NameField $nameField */
-        $nameField = $this->container->get(NameField::class);
-        $nameField->setSalesChannelContext($salesChannelContext);
-
-        /** @var AttributeField $attributeField */
-        $attributeField = $this->container->get(AttributeField::class);
-        $attributeField->setSalesChannelContext($salesChannelContext);
-        $attributeField->setNavigationCategory(Utils::fetchNavigationCategoryFromSalesChannel(
-            $this->container->get('category.repository'),
-            $salesChannelContext->getSalesChannel()
-        ));
-        $attributeField->setCatUrlPrefix($this->buildCatUrlPrefix($salesChannelContext));
-    }
-
-    private function buildCatUrlPrefix(SalesChannelContext $salesChannelContext): string
-    {
-        $url = $this->getTranslatedDomainBaseUrl($salesChannelContext);
-        if (!$url) {
-            return '';
-        }
-
-        $path = parse_url($url, PHP_URL_PATH);
-        if (!$path) {
-            return '';
-        }
-
-        return rtrim($path, '/');
-    }
-
-    protected function getTranslatedDomainBaseUrl(SalesChannelContext $salesChannelContext): ?string
-    {
-        $salesChannel = $salesChannelContext->getSalesChannel();
-        $domainCollection = $salesChannel->getDomains();
-
-        $domainEntities = $this->getTranslatedEntities($domainCollection, $salesChannelContext);
-
-        return $domainEntities->first() ? rtrim($domainEntities->first()->getUrl(), '/') : null;
-    }
-
-    protected function getTranslatedEntities(
-        ?EntityCollection $collection,
-        SalesChannelContext $salesChannelContext
-    ): ?Collection {
-        if (!$collection) {
-            return null;
-        }
-
-        $translatedEntities = $collection->filterByProperty(
-            'languageId',
-            $salesChannelContext->getSalesChannel()->getLanguageId()
-        );
-
-        if ($translatedEntities->count() === 0) {
-            return null;
-        }
-
-        return $translatedEntities;
+        $fieldInitializer = $this->container->get(ExportFieldInitializer::class);
+        $fieldInitializer->initializeExportFields($salesChannelContext, $shopkey, $customerGroups);
     }
 }

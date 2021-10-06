@@ -2,13 +2,16 @@
 
 declare(strict_types=1);
 
-namespace FINDOLOGIC\FinSearch\Export\Fields;
+namespace FINDOLOGIC\FinSearch\Export\Data\Fields;
 
 use FINDOLOGIC\Export\Data\Attribute;
 use FINDOLOGIC\Export\Helpers\DataHelper;
 use FINDOLOGIC\FinSearch\Exceptions\Export\Product\ProductHasNoCategoriesException;
 use FINDOLOGIC\FinSearch\Export\DynamicProductGroupService;
 use FINDOLOGIC\FinSearch\Export\ExportTranslationService;
+use FINDOLOGIC\FinSearch\Export\UrlBuilderService;
+use FINDOLOGIC\FinSearch\Findologic\IntegrationType;
+use FINDOLOGIC\FinSearch\Struct\Config;
 use FINDOLOGIC\FinSearch\Utils\Utils;
 use Shopware\Core\Content\Category\CategoryEntity;
 use Shopware\Core\Content\Product\ProductEntity;
@@ -19,40 +22,38 @@ use Symfony\Component\Routing\RouterInterface;
 class AttributeField implements MultiValueExportFieldInterface
 {
     use ExportContextAware;
+    use ProductPropertyAware;
 
     /** @var RouterInterface */
     protected $router;
 
-    /** @var DynamicProductGroupService */
+    /** @var DynamicProductGroupService|null */
     protected $dynamicProductGroupService;
 
     /** @var ExportTranslationService */
     protected $translationService;
 
+    /** @var UrlBuilderService */
+    protected $urlBuilderService;
+
+    /** @var Config */
+    protected $config;
+
     /** @var CategoryEntity|null */
     protected $navigationCategory;
 
-    /** @var string|null */
-    protected $catUrlPrefix;
-
-    /** @var PropertyGroupOptionEntity[] */
-    protected $attributeProperties;
-
     public function __construct(
         RouterInterface $router,
-        DynamicProductGroupService $dynamicProductGroupService,
-        ExportTranslationService $translationService
+        ?DynamicProductGroupService $dynamicProductGroupService,
+        ExportTranslationService $translationService,
+        UrlBuilderService $urlBuilderService,
+        Config $config
     ) {
         $this->router = $router;
         $this->dynamicProductGroupService = $dynamicProductGroupService;
         $this->translationService = $translationService;
-    }
-
-    public function setDynamicProductGroupService(DynamicProductGroupService $dynamicProductGroupService): self
-    {
-        $this->dynamicProductGroupService = $dynamicProductGroupService;
-
-        return $this;
+        $this->urlBuilderService = $urlBuilderService;
+        $this->config = $config;
     }
 
     public function setNavigationCategory(CategoryEntity $category): self
@@ -62,29 +63,19 @@ class AttributeField implements MultiValueExportFieldInterface
         return $this;
     }
 
-    public function setCatUrlPrefix(string $prefix): self
-    {
-        $this->catUrlPrefix = $prefix;
-
-        return $this;
-    }
-
-    /**
-     * @param PropertyGroupOptionEntity[] $properties
-     */
-    public function setProperties(array $properties): self
-    {
-        $this->attributeProperties = $properties;
-
-        return $this;
-    }
-
     /**
      * @return Attribute[]
      * @throws ProductHasNoCategoriesException
+     * @throws \Psr\Cache\InvalidArgumentException
      */
     public function parse(): array
     {
+        if (!$this->config->isInitialized()) {
+            $this->config->initializeBySalesChannel($this->salesChannelContext);
+        }
+        $this->urlBuilderService->setSalesChannelContext($this->salesChannelContext);
+
+        /** @var Attribute[] $attributes */
         $attributes = [];
 
         $this->parseCategoriesAndCatUrls($attributes);
@@ -97,6 +88,7 @@ class AttributeField implements MultiValueExportFieldInterface
     }
 
     /**
+     * @param Attribute[] $attributes
      * @throws ProductHasNoCategoriesException
      */
     protected function parseCategoriesAndCatUrls(array &$attributes): void
@@ -105,9 +97,6 @@ class AttributeField implements MultiValueExportFieldInterface
         if ($productCategories === null || empty($productCategories->count())) {
             throw new ProductHasNoCategoriesException($this->product);
         }
-
-        $categoryAttribute = new Attribute('cat');
-        $catUrlAttribute = new Attribute('cat_url');
 
         $catUrls = [];
         $categories = [];
@@ -118,12 +107,14 @@ class AttributeField implements MultiValueExportFieldInterface
             $this->parseCategoryAttributes($dynamicGroupCategories, $catUrls, $categories);
         }
 
-        if (!Utils::isEmpty($catUrls)) {
-            $catUrlAttribute->setValues(array_unique($catUrls));
+        if ($this->isDirectIntegration() && !Utils::isEmpty($catUrls)) {
+            $catUrlAttribute = new Attribute('cat_url');
+            $catUrlAttribute->setValues(Utils::flat($catUrls));
             $attributes[] = $catUrlAttribute;
         }
 
         if (!Utils::isEmpty($categories)) {
+            $categoryAttribute = new Attribute('cat');
             $categoryAttribute->setValues(array_unique($categories));
             $attributes[] = $categoryAttribute;
         }
@@ -144,18 +135,37 @@ class AttributeField implements MultiValueExportFieldInterface
         }
     }
 
+    /**
+     * @param Attribute[] $attributes
+     */
     protected function parseAttributeProperties(array &$attributes): void
     {
-        foreach ($this->attributeProperties as $propertyGroupOptionEntity) {
+        $filteredCollection = $this->propertyGroupOptionCollection->filter(
+            function (PropertyGroupOptionEntity $propertyGroupOptionEntity) {
+                if (!$group = $propertyGroupOptionEntity->getGroup()) {
+                    return false;
+                }
+
+                // Method getFilterable exists since Shopware 6.2.x.
+                // Non-filterable properties will be available in the properties field.
+                if (method_exists($group, 'getFilterable') && !$group->getFilterable()) {
+                    return false;
+                }
+
+                return true;
+            }
+        );
+
+        foreach ($filteredCollection as $propertyGroupOptionEntity) {
             $group = $propertyGroupOptionEntity->getGroup();
             if ($group && $propertyGroupOptionEntity->getTranslation('name') && $group->getTranslation('name')) {
-                $groupName = Utils::removeSpecialChars($group->getTranslation('name'));
+                $groupName = $this->getAttributeKey($group->getTranslation('name'));
                 $propertyGroupOptionName = $propertyGroupOptionEntity->getTranslation('name');
                 if (!Utils::isEmpty($groupName) && !Utils::isEmpty($propertyGroupOptionName)) {
-                    $properyGroupAttrib = new Attribute(Utils::removeSpecialChars($groupName));
-                    $properyGroupAttrib->addValue(Utils::removeControlCharacters($propertyGroupOptionName));
+                    $propertyGroupAttrib = new Attribute($groupName);
+                    $propertyGroupAttrib->addValue(Utils::removeControlCharacters($propertyGroupOptionName));
 
-                    $attributes[] = $properyGroupAttrib;
+                    $attributes[] = $propertyGroupAttrib;
                 }
             }
 
@@ -169,10 +179,10 @@ class AttributeField implements MultiValueExportFieldInterface
                     continue;
                 }
 
-                $groupName = $group->getTranslation('name');
+                $groupName = $this->getAttributeKey($group->getTranslation('name'));
                 $optionName = $settingOption->getTranslation('name');
                 if (!Utils::isEmpty($groupName) && !Utils::isEmpty($optionName)) {
-                    $configAttrib = new Attribute(Utils::removeSpecialChars($groupName));
+                    $configAttrib = new Attribute($groupName);
                     $configAttrib->addValue(Utils::removeControlCharacters($optionName));
 
                     $attributes[] = $configAttrib;
@@ -181,6 +191,9 @@ class AttributeField implements MultiValueExportFieldInterface
         }
     }
 
+    /**
+     * @param Attribute[] $attributes
+     */
     protected function parseCustomFieldAttributes(array &$attributes): void
     {
         $this->parseCustomFieldProperties($attributes, $this->product);
@@ -189,6 +202,9 @@ class AttributeField implements MultiValueExportFieldInterface
         }
     }
 
+    /**
+     * @param Attribute[] $attributes
+     */
     protected function parseAdditionalAttributes(array &$attributes): void
     {
         $shippingFree = $this->translationService->translateBoolean($this->product->getShippingFree());
@@ -197,19 +213,25 @@ class AttributeField implements MultiValueExportFieldInterface
         $attributes[] = new Attribute('rating', [$rating]);
     }
 
-    protected function parseCustomFieldProperties(array &$attributes, ProductEntity $product): array
+    protected function parseCustomFieldProperties(array &$attributes, ProductEntity $product): void
     {
         $productFields = $product->getCustomFields();
         if (empty($productFields)) {
-            return [];
+            return;
         }
 
         foreach ($productFields as $key => $value) {
-            $cleanedKey = Utils::removeSpecialChars($key);
+            $key = $this->getAttributeKey($key);
             $cleanedValue = $this->getCleanedAttributeValue($value);
 
-            if (!Utils::isEmpty($cleanedKey) && !Utils::isEmpty($cleanedValue)) {
-                $customFieldAttribute = new Attribute($cleanedKey, (array)$cleanedValue);
+            if (!Utils::isEmpty($key) && !Utils::isEmpty($cleanedValue)) {
+                // Third-Party plugins may allow setting multidimensional custom-fields. As those can not really
+                // be properly sanitized, they need to be skipped.
+                if (is_array($cleanedValue) && is_array(array_values($cleanedValue)[0])) {
+                    continue;
+                }
+
+                $customFieldAttribute = new Attribute($key, (array)$cleanedValue);
                 $attributes[] = $customFieldAttribute;
             }
         }
@@ -232,34 +254,9 @@ class AttributeField implements MultiValueExportFieldInterface
                 continue;
             }
 
+            // If the category is not in the current sales channel's root category, we do not need to export it.
             if (!$categoryEntity->getPath() || !strpos($categoryEntity->getPath(), $navigationCategoryId)) {
                 continue;
-            }
-
-            $seoUrls = $this->fetchCategorySeoUrls($categoryEntity);
-            if ($seoUrls->count() > 0) {
-                foreach ($seoUrls->getElements() as $seoUrlEntity) {
-                    $catUrl = $seoUrlEntity->getSeoPathInfo();
-                    if (!Utils::isEmpty($catUrl)) {
-                        $catUrls[] = $this->catUrlPrefix . sprintf('/%s', ltrim($catUrl, '/'));
-                    }
-                }
-            }
-
-            $catUrl = sprintf(
-                '/%s',
-                ltrim(
-                    $this->router->generate(
-                        'frontend.navigation.page',
-                        ['navigationId' => $categoryEntity->getId()],
-                        RouterInterface::ABSOLUTE_PATH
-                    ),
-                    '/'
-                )
-            );
-
-            if (!Utils::isEmpty($catUrl)) {
-                $catUrls[] = $catUrl;
             }
 
             $categoryPath = Utils::buildCategoryPath(
@@ -268,7 +265,18 @@ class AttributeField implements MultiValueExportFieldInterface
             );
 
             if (!Utils::isEmpty($categoryPath)) {
-                $categories[] = $categoryPath;
+                $categories = array_merge($categories, [$categoryPath]);
+            }
+
+            // Only export `cat_url`s recursively if integration type is Direct Integration.
+            // Note that this also applies for the `cat` attribute.
+            if ($this->isDirectIntegration()) {
+                $catUrls = array_merge(
+                    $catUrls,
+                    $this->urlBuilderService->getCategoryUrls($categoryEntity, $this->salesChannelContext->getContext())
+                );
+
+                $categories = $this->addCategoryNamesRecursively($categoryPath, $categories);
             }
         }
     }
@@ -316,5 +324,22 @@ class AttributeField implements MultiValueExportFieldInterface
         }
 
         return $value;
+    }
+
+    protected function isDirectIntegration(): bool
+    {
+        return $this->config->getIntegrationType() === IntegrationType::DI;
+    }
+
+    protected function isApiIntegration(): bool
+    {
+        return $this->config->getIntegrationType() === IntegrationType::API;
+    }
+
+    protected function addCategoryNamesRecursively(string $categoryPath, array $categories): array
+    {
+        $parentCategory = explode('_', $categoryPath);
+
+        return array_merge($categories, $parentCategory);
     }
 }

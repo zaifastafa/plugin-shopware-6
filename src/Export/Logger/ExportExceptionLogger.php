@@ -124,6 +124,9 @@ class ExportExceptionLogger
         $help = 'If you see this message in your logs, please report this as a bug.';
         $errorDetails = sprintf('Error message: %s', $e->getMessage());
 
-        $this->logger->warning(implode(' ', [$error, $help, $errorDetails]), ['exception' => $e]);
+        $this->logger->warning(implode(' ', [$error, $help, $errorDetails]), [
+            'exception' => $e,
+            'product' => $product
+        ]);
     }
 }

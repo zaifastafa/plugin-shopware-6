@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace FINDOLOGIC\FinSearch\Export\Fields;
+namespace FINDOLOGIC\FinSearch\Export\Data\Fields;
 
 use Shopware\Core\Content\Product\ProductEntity;
 use Shopware\Core\System\SalesChannel\SalesChannelContext;

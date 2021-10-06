@@ -8,6 +8,8 @@ class XmlFields
 {
     public const KEYS = [
         'name',
+        'sort',
+        'bonus',
         'attributes',
         'prices',
         'description',

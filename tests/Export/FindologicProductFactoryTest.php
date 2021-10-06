@@ -8,11 +8,16 @@ use FINDOLOGIC\Export\XML\XMLItem;
 use FINDOLOGIC\FinSearch\Exceptions\Export\Product\ProductHasNoCategoriesException;
 use FINDOLOGIC\FinSearch\Exceptions\Export\Product\ProductHasNoNameException;
 use FINDOLOGIC\FinSearch\Exceptions\Export\Product\ProductHasNoPricesException;
+use FINDOLOGIC\FinSearch\Export\Data\Fields\DescriptionField;
+use FINDOLOGIC\FinSearch\Export\DynamicProductGroupService;
+use FINDOLOGIC\FinSearch\Export\Data\Fields\AttributeField;
+use FINDOLOGIC\FinSearch\Export\Data\Fields\NameField;
 use FINDOLOGIC\FinSearch\Export\FindologicProductFactory;
 use FINDOLOGIC\FinSearch\Struct\FindologicProduct;
 use FINDOLOGIC\FinSearch\Tests\Traits\DataHelpers\ConfigHelper;
 use FINDOLOGIC\FinSearch\Tests\Traits\DataHelpers\ProductHelper;
 use FINDOLOGIC\FinSearch\Tests\Traits\DataHelpers\SalesChannelHelper;
+use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Shopware\Core\Content\Product\ProductEntity;
 use Shopware\Core\Framework\Test\TestCaseBase\IntegrationTestBehaviour;
@@ -38,6 +43,12 @@ class FindologicProductFactoryTest extends TestCase
         $this->salesChannelContext = $this->buildSalesChannelContext();
         $this->shopkey = $this->getShopkey();
 
+        /** @var MockObject|DynamicProductGroupService $dynamicProductGroupServiceMock */
+        $dynamicProductGroupServiceMock = $this->getMockBuilder(DynamicProductGroupService::class)
+            ->disableOriginalConstructor()
+            ->getMock();
+
+        $this->getContainer()->set('fin_search.dynamic_product_group', $dynamicProductGroupServiceMock);
         $this->getContainer()->set('fin_search.sales_channel_context', $this->salesChannelContext);
     }
 
@@ -51,16 +62,18 @@ class FindologicProductFactoryTest extends TestCase
         $productEntity = $this->createTestProduct();
         $this->assertInstanceOf(ProductEntity::class, $productEntity);
 
-        /** @var FindologicProductFactory $findologicProductFactory */
         $findologicProductFactory = new FindologicProductFactory();
-
         $findologicProduct = $findologicProductFactory->buildInstance(
             $productEntity,
             $this->getContainer()->get('router'),
             $this->getContainer(),
             $this->shopkey,
             [],
-            new XMLItem('123')
+            new XMLItem('123'),
+            null,
+            $this->getContainer()->get(NameField::class),
+            $this->getContainer()->get(DescriptionField::class),
+            $this->getContainer()->get(AttributeField::class)
         );
 
         $this->assertInstanceOf(FindologicProduct::class, $findologicProduct);

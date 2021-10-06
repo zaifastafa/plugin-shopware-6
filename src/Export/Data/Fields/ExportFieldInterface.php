@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace FINDOLOGIC\FinSearch\Export\Fields;
+namespace FINDOLOGIC\FinSearch\Export\Data\Fields;
 
 use FINDOLOGIC\FinSearch\Exceptions\Export\ExportException;
 use Shopware\Core\Content\Product\ProductEntity;

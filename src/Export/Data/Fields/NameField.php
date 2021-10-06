@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace FINDOLOGIC\FinSearch\Export\Fields;
+namespace FINDOLOGIC\FinSearch\Export\Data\Fields;
 
 use FINDOLOGIC\Export\Data\Name;
 use FINDOLOGIC\Export\Helpers\Serializable;
@@ -14,8 +14,8 @@ class NameField implements SingleValueExportFieldInterface
     use ExportContextAware;
 
     /**
-     * @return Name
      * @throws ProductHasNoNameException
+     * @return Name
      */
     public function parse(): Serializable
     {

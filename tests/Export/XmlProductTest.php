@@ -5,13 +5,19 @@ declare(strict_types=1);
 namespace FINDOLOGIC\FinSearch\Tests\Export;
 
 use FINDOLOGIC\Export\Data\DateAdded;
+use FINDOLOGIC\Export\Data\Description;
 use FINDOLOGIC\Export\Data\Item;
+use FINDOLOGIC\Export\Data\Name;
 use FINDOLOGIC\Export\XML\XMLItem;
 use FINDOLOGIC\FinSearch\Exceptions\Export\Product\AccessEmptyPropertyException;
 use FINDOLOGIC\FinSearch\Exceptions\Export\Product\ProductHasNoAttributesException;
 use FINDOLOGIC\FinSearch\Exceptions\Export\Product\ProductHasNoCategoriesException;
 use FINDOLOGIC\FinSearch\Exceptions\Export\Product\ProductHasNoNameException;
 use FINDOLOGIC\FinSearch\Exceptions\Export\Product\ProductHasNoPricesException;
+use FINDOLOGIC\FinSearch\Export\Data\Fields\DescriptionField;
+use FINDOLOGIC\FinSearch\Export\DynamicProductGroupService;
+use FINDOLOGIC\FinSearch\Export\Data\Fields\AttributeField;
+use FINDOLOGIC\FinSearch\Export\Data\Fields\NameField;
 use FINDOLOGIC\FinSearch\Export\FindologicProductFactory;
 use FINDOLOGIC\FinSearch\Export\XmlProduct;
 use FINDOLOGIC\FinSearch\Struct\FindologicProduct;
@@ -45,6 +51,11 @@ class XmlProductTest extends TestCase
         $this->shopkey = $this->getShopkey();
 
         $this->getContainer()->set('fin_search.sales_channel_context', $this->salesChannelContext);
+        /** @var MockObject|DynamicProductGroupService $dynamicProductGroupServiceMock */
+        $dynamicProductGroupServiceMock = $this->getMockBuilder(DynamicProductGroupService::class)
+            ->disableOriginalConstructor()
+            ->getMock();
+        $this->getContainer()->set('fin_search.dynamic_product_group', $dynamicProductGroupServiceMock);
     }
 
     /**
@@ -58,6 +69,12 @@ class XmlProductTest extends TestCase
     {
         $productEntity = $this->createTestProduct();
 
+        $expectedName = new Name();
+        $expectedName->setValue('some name');
+
+        $expectedDescription = new Description();
+        $expectedDescription->setValue('some description');
+
         /** @var FindologicProduct|MockObject $findologicProductMock */
         $findologicProductMock = $this->getMockBuilder(FindologicProduct::class)->setConstructorArgs([
             $productEntity,
@@ -68,13 +85,15 @@ class XmlProductTest extends TestCase
             new XMLItem('123')
         ])->getMock();
         $findologicProductMock->expects($this->exactly(2))->method('hasName')->willReturn(true);
-        $findologicProductMock->expects($this->once())->method('getName')->willReturn('some name');
+        $findologicProductMock->expects($this->once())->method('getName')
+            ->willReturn($expectedName);
         $findologicProductMock->expects($this->exactly(2))->method('hasAttributes')->willReturn(true);
         $findologicProductMock->expects($this->once())->method('getAttributes')->willReturn([]);
         $findologicProductMock->expects($this->exactly(2))->method('hasPrices')->willReturn(true);
         $findologicProductMock->expects($this->once())->method('getPrices')->willReturn([]);
         $findologicProductMock->expects($this->once())->method('hasDescription')->willReturn(true);
-        $findologicProductMock->expects($this->once())->method('getDescription')->willReturn('some description');
+        $findologicProductMock->expects($this->once())->method('getDescription')
+            ->willReturn($expectedDescription);
         $findologicProductMock->expects($this->once())->method('hasDateAdded')->willReturn(true);
         $dateAdded = new DateAdded();
         $dateAdded->setDateValue($productEntity->getCreatedAt());
@@ -100,9 +119,19 @@ class XmlProductTest extends TestCase
 
         /** @var ContainerInterface|MockObject $containerMock */
         $containerMock = $this->getMockBuilder(ContainerInterface::class)->disableOriginalConstructor()->getMock();
-        $containerMock->expects($this->once())->method('get')
-            ->with(FindologicProductFactory::class)
-            ->willReturn($findologicFactoryMock);
+        $containerMock->expects($this->exactly(4))->method('get')
+            ->withConsecutive(
+                [NameField::class],
+                [DescriptionField::class],
+                [AttributeField::class],
+                [FindologicProductFactory::class]
+            )
+            ->willReturnOnConsecutiveCalls(
+                $this->getContainer()->get(NameField::class),
+                $this->getContainer()->get(DescriptionField::class),
+                $this->getContainer()->get(AttributeField::class),
+                $findologicFactoryMock
+            );
 
         $xmlProduct = new XmlProduct(
             $productEntity,
@@ -153,9 +182,19 @@ class XmlProductTest extends TestCase
 
         /** @var ContainerInterface|MockObject $containerMock */
         $containerMock = $this->getMockBuilder(ContainerInterface::class)->disableOriginalConstructor()->getMock();
-        $containerMock->expects($this->once())->method('get')
-            ->with(FindologicProductFactory::class)
-            ->willReturn($findologicFactoryMock);
+        $containerMock->expects($this->exactly(4))->method('get')
+            ->withConsecutive(
+                [NameField::class],
+                [DescriptionField::class],
+                [AttributeField::class],
+                [FindologicProductFactory::class]
+            )
+            ->willReturnOnConsecutiveCalls(
+                $this->getContainer()->get(NameField::class),
+                $this->getContainer()->get(DescriptionField::class),
+                $this->getContainer()->get(AttributeField::class),
+                $findologicFactoryMock
+            );
 
         $xmlProduct = $this->getDefaultXmlProduct($productEntity, $containerMock);
         $xmlProduct->buildXmlItem();

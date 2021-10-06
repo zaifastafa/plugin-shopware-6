@@ -95,19 +95,109 @@
         <!-- Export fields -->
 
         <service
-            class="FINDOLOGIC\FinSearch\Export\Fields\NameField"
-            id="FINDOLOGIC\FinSearch\Export\Fields\NameField"
+            class="FINDOLOGIC\FinSearch\Export\Data\Fields\NameField"
+            id="FINDOLOGIC\FinSearch\Export\Data\Fields\NameField"
             public="true"
         />
 
         <service
-            class="FINDOLOGIC\FinSearch\Export\Fields\AttributeField"
-            id="FINDOLOGIC\FinSearch\Export\Fields\AttributeField"
+                class="FINDOLOGIC\FinSearch\Export\Data\Fields\DescriptionField"
+                id="FINDOLOGIC\FinSearch\Export\Data\Fields\DescriptionField"
+                public="true"
+        />
+
+        <service
+                class="FINDOLOGIC\FinSearch\Export\Data\Fields\PriceField"
+                id="FINDOLOGIC\FinSearch\Export\Data\Fields\PriceField"
+                public="true"
+        />
+
+        <service
+                class="FINDOLOGIC\FinSearch\Export\Data\Fields\UrlField"
+                id="FINDOLOGIC\FinSearch\Export\Data\Fields\UrlField"
+                public="true"
+        >
+            <argument type="service" id="FINDOLOGIC\FinSearch\Export\UrlBuilderService"/>
+        </service>
+
+        <service
+                class="FINDOLOGIC\FinSearch\Export\Data\Fields\BonusField"
+                id="FINDOLOGIC\FinSearch\Export\Data\Fields\BonusField"
+                public="true"
+        />
+
+        <service
+                class="FINDOLOGIC\FinSearch\Export\Data\Fields\SalesFrequencyField"
+                id="FINDOLOGIC\FinSearch\Export\Data\Fields\SalesFrequencyField"
+                public="true"
+        >
+            <argument type="service" id="order_line_item.repository"/>
+        </service>
+
+        <service
+                class="FINDOLOGIC\FinSearch\Export\Data\Fields\DateAddedField"
+                id="FINDOLOGIC\FinSearch\Export\Data\Fields\DateAddedField"
+                public="true"
+        />
+
+        <service
+                class="FINDOLOGIC\FinSearch\Export\Data\Fields\SortField"
+                id="FINDOLOGIC\FinSearch\Export\Data\Fields\SortField"
+                public="true"
+        />
+
+        <service
+                class="FINDOLOGIC\FinSearch\Export\Data\Fields\KeywordField"
+                id="FINDOLOGIC\FinSearch\Export\Data\Fields\KeywordField"
+                public="true"
+        />
+
+        <service
+                class="FINDOLOGIC\FinSearch\Export\Data\Fields\OrdernumberField"
+                id="FINDOLOGIC\FinSearch\Export\Data\Fields\OrdernumberField"
+                public="true"
+        />
+
+        <service
+                class="FINDOLOGIC\FinSearch\Export\Data\Fields\PropertyField"
+                id="FINDOLOGIC\FinSearch\Export\Data\Fields\PropertyField"
+                public="true"
+        >
+            <argument type="service" id="Shopware\Core\Framework\Adapter\Translation\Translator"/>
+        </service>
+
+        <service
+            class="FINDOLOGIC\FinSearch\Export\Data\Fields\AttributeField"
+            id="FINDOLOGIC\FinSearch\Export\Data\Fields\AttributeField"
             public="true"
         >
             <argument type="service" id="router"/>
-            <argument id="fin_search.dynamic_product_group" type="service" />
+            <argument id="fin_search.dynamic_product_group" type="service" on-invalid="null" />
             <argument type="service" id="FINDOLOGIC\FinSearch\Export\ExportTranslationService"/>
+            <argument type="service" id="FINDOLOGIC\FinSearch\Export\UrlBuilderService"/>
+            <argument type="service" id="FINDOLOGIC\FinSearch\Struct\Config"/>
+        </service>
+
+        <service
+                class="FINDOLOGIC\FinSearch\Export\Data\Fields\ImageField"
+                id="FINDOLOGIC\FinSearch\Export\Data\Fields\ImageField"
+                public="true"
+        >
+            <argument type="service" id="FINDOLOGIC\FinSearch\Export\ProductImageService"/>
+        </service>
+
+        <service
+                class="FINDOLOGIC\FinSearch\Export\Data\Fields\UsergroupField"
+                id="FINDOLOGIC\FinSearch\Export\Data\Fields\UsergroupField"
+                public="true"
+        />
+
+        <service
+            class="FINDOLOGIC\FinSearch\Export\Data\ExportFieldInitializer"
+            id="FINDOLOGIC\FinSearch\Export\Data\ExportFieldInitializer"
+            public="true"
+        >
+            <argument type="service" id="service_container"/>
         </service>
 
         <!-- Storefront -->
