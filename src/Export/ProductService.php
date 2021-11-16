@@ -4,12 +4,11 @@ declare(strict_types=1);
 
 namespace FINDOLOGIC\FinSearch\Export;
 
+use FINDOLOGIC\FinSearch\Export\Builder\CriteriaBuilder;
 use FINDOLOGIC\FinSearch\Utils\Utils;
 use Psr\Container\ContainerInterface;
-use Shopware\Core\Content\Product\Aggregate\ProductVisibility\ProductVisibilityDefinition;
 use Shopware\Core\Content\Product\ProductCollection;
 use Shopware\Core\Content\Product\ProductEntity;
-use Shopware\Core\Content\Product\SalesChannel\ProductAvailableFilter;
 use Shopware\Core\Framework\DataAbstractionLayer\Search\Criteria;
 use Shopware\Core\Framework\DataAbstractionLayer\Search\EntitySearchResult;
 use Shopware\Core\Framework\DataAbstractionLayer\Search\Filter\EqualsFilter;
@@ -17,7 +16,6 @@ use Shopware\Core\Framework\DataAbstractionLayer\Search\Filter\MultiFilter;
 use Shopware\Core\Framework\DataAbstractionLayer\Search\Filter\NotFilter;
 use Shopware\Core\Framework\DataAbstractionLayer\Search\Grouping\FieldGrouping;
 use Shopware\Core\Framework\DataAbstractionLayer\Search\IdSearchResult;
-use Shopware\Core\Framework\DataAbstractionLayer\Search\Sorting\FieldSorting;
 use Shopware\Core\Framework\Uuid\Uuid;
 use Shopware\Core\System\SalesChannel\SalesChannelContext;
 use Shopware\Core\System\SystemConfig\SystemConfigService;
@@ -96,15 +94,34 @@ class ProductService
             $this->salesChannelContext->getContext()
         );
 
+        $finalProducts = new ProductCollection();
+
         /** @var ProductCollection $products */
         $products = $result->getEntities();
         foreach ($products as $product) {
             $children = $this->getChildrenOrSiblings($product);
+            if ($product->getMainVariantId() !== null) {
+                $newProduct = $children->get($product->getMainVariantId());
+
+                $children = $this->getChildrenOrSiblings($newProduct);
+                $newProduct->setChildren($children);
+                $finalProducts->add($newProduct);
+                continue;
+            }
 
             $product->setChildren($children);
+
+            $finalProducts->add($product);
         }
 
-        return $result;
+        return new EntitySearchResult(
+            ProductEntity::class,
+            $finalProducts->count(),
+            $finalProducts,
+            null,
+            $criteria,
+            $this->salesChannelContext->getContext()
+        );
     }
 
     public function searchAllProducts(
@@ -131,9 +148,17 @@ class ProductService
             ->getElements();
     }
 
-    protected function addProductAssociations(Criteria $criteria): void
+    protected function findVisibleProductsWithAssociations(array $ids): EntitySearchResult
     {
-        Utils::addProductAssociations($criteria);
+        $criteria = $this->getCriteriaWithProductVisibility();
+        $criteria->setIds($ids);
+        $criteria->resetGroupFields();
+
+        /** @var EntitySearchResult $result */
+        return $this->container->get('product.repository')->search(
+            $criteria,
+            $this->salesChannelContext->getContext()
+        );
     }
 
     /**
@@ -157,6 +182,7 @@ class ProductService
         );
 
         $this->addProductAssociations($criteria);
+        $this->addProductAssociations($childrenCriteria);
 
         /** @var ProductCollection $result */
         $result = $productRepository->search($criteria, $this->salesChannelContext->getContext());
@@ -172,36 +198,32 @@ class ProductService
 
     protected function getCriteriaWithProductVisibility(?int $limit = null, ?int $offset = null): Criteria
     {
-        $criteria = $this->buildProductCriteria($limit, $offset);
+        /** @var CriteriaBuilder $criteriaBuilder */
+        $criteriaBuilder = $this->container->get(CriteriaBuilder::class);
+        $criteriaBuilder->setCriteria($this->buildProductCriteria($limit, $offset));
+        $criteriaBuilder->withSearchVisibility($this->salesChannelContext->getSalesChannel()->getId());
 
-        return $criteria->addFilter(
-            new ProductAvailableFilter(
-                $this->salesChannelContext->getSalesChannel()->getId(),
-                ProductVisibilityDefinition::VISIBILITY_SEARCH
-            )
-        );
+        return $criteriaBuilder->build();
     }
 
     protected function buildProductCriteria(?int $limit = null, ?int $offset = null): Criteria
     {
-        $criteria = new Criteria();
-        $criteria->addSorting(new FieldSorting('createdAt'));
+        /** @var CriteriaBuilder $criteriaBuilder */
+        $criteriaBuilder = $this->container->get(CriteriaBuilder::class);
+        $criteriaBuilder->reset();
 
-        $this->addGrouping($criteria);
-        $this->handleAvailableStock($criteria);
-        $this->addProductAssociations($criteria);
+        $criteriaBuilder->withCreateDateSorting();
+        $criteriaBuilder->withGrouping();
+        $criteriaBuilder->withAvailableStock($this->salesChannelContext->getSalesChannel()->getId());
+        $criteriaBuilder->withProductAssociations();
+        $criteriaBuilder->withOffset($offset);
+        $criteriaBuilder->withLimit($limit);
 
-        if ($offset !== null) {
-            $criteria->setOffset($offset);
-        }
-        if ($limit !== null) {
-            $criteria->setLimit($limit);
-        }
-
-        return $criteria;
+        return $criteriaBuilder->build();
     }
 
     /**
+     * @deprecated tag:v3.0.0 Use \FINDOLOGIC\FinSearch\Export\Builder\CriteriaBuilder::withGrouping instead.
      * @see \Shopware\Core\Content\Product\SalesChannel\Listing\ProductListingLoader::addGrouping()
      */
     protected function addGrouping(Criteria $criteria): void
@@ -217,6 +239,7 @@ class ProductService
     }
 
     /**
+     * @deprecated tag:v3.0.0 Use \FINDOLOGIC\FinSearch\Export\Builder\CriteriaBuilder::withAvailableStock instead.
      * @see \Shopware\Core\Content\Product\SalesChannel\Listing\ProductListingLoader::handleAvailableStock()
      */
     protected function handleAvailableStock(Criteria $criteria): void
@@ -240,6 +263,10 @@ class ProductService
         );
     }
 
+    /**
+     * @deprecated tag:v3.0.0 Use \FINDOLOGIC\FinSearch\Export\Builder\CriteriaBuilder::withFindologicOrdernumber
+     * instead.
+     */
     protected function addProductIdFilters(Criteria $criteria, string $productId): void
     {
         $productFilter = [
@@ -260,5 +287,13 @@ class ProductService
                 $productFilter
             )
         );
+    }
+
+    /**
+     * @deprecated tag:v3.0.0 Use \FINDOLOGIC\FinSearch\Export\Builder\CriteriaBuilder::withProductAssociations instead.
+     */
+    protected function addProductAssociations(Criteria $criteria): void
+    {
+        Utils::addProductAssociations($criteria);
     }
 }
